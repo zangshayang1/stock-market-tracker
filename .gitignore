@@ -1,4 +1,6 @@
 .env
+.DS_Store
+.claude/
 __pycache__/
 *.py[cod]
 *.egg-info/
