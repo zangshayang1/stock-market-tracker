@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.cassette.yaml
+cassettes/
+~/.investment-monitor/
+alarm_state.json
+backtest_result.json

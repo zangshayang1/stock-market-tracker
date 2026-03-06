@@ -1,0 +1,22 @@
+backtest:
+  symbol: QQQ
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  initial_capital: 10000.00
+  commission_per_trade: 1.00
+  strategy:
+    type: dip_buy
+    params:
+      entry_condition:
+        type: day_change_pct
+        direction: down
+        threshold_pct: 2.0
+        reference: prev_close
+      shares_per_trade: 10
+      exit_condition:
+        type: day_change_pct
+        direction: up
+        threshold_pct: 3.0
+        reference: entry_price
+      max_open_positions: 5
+      stop_loss_pct: 5.0

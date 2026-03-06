@@ -1,0 +1,58 @@
+alarms:
+  - name: "QQQ Large Daily Drop"
+    cooldown_minutes: 120
+    logic: ANY
+    rules:
+      - id: "qqq-day-drop-2pct"
+        type: day_change_pct
+        symbol: QQQ
+        params:
+          direction: down
+          threshold_pct: 2.0
+          reference: prev_close
+
+  - name: "AAPL RSI Oversold"
+    cooldown_minutes: 240
+    logic: ALL
+    rules:
+      - id: "aapl-rsi-oversold"
+        type: rsi
+        symbol: AAPL
+        params:
+          condition: oversold
+          threshold: 30
+
+  - name: "SPY Price Below 500"
+    cooldown_minutes: 60
+    logic: ANY
+    rules:
+      - id: "spy-below-500"
+        type: price_threshold
+        symbol: SPY
+        params:
+          direction: below
+          level: 500.0
+          require_cross: true
+
+  - name: "NVDA Volume Spike"
+    cooldown_minutes: 60
+    logic: ANY
+    rules:
+      - id: "nvda-vol-spike"
+        type: volume_spike
+        symbol: NVDA
+        params:
+          multiplier: 3.0
+          min_time_of_day: "11:00"
+
+  - name: "QQQ 5-Day Decline"
+    cooldown_minutes: 480
+    logic: ANY
+    rules:
+      - id: "qqq-5day-drop"
+        type: nday_change_pct
+        symbol: QQQ
+        params:
+          direction: down
+          threshold_pct: 5.0
+          n_days: 5

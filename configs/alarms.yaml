@@ -1,0 +1,12 @@
+alarms:
+  - name: "QQQ Dip 1.5%"
+    cooldown_minutes: 60
+    logic: ANY
+    rules:
+      - id: "qqq-day-drop-1.5pct"
+        type: day_change_pct
+        symbol: QQQ
+        params:
+          direction: down
+          threshold_pct: 1.5
+          reference: prev_close
