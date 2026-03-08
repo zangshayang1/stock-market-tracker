@@ -24,7 +24,8 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-load_dotenv()
+# Search upward from this file's location so .env is found regardless of CWD
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
 app = typer.Typer(name="market-tracker", help="Stock alarm monitor & backtester")
 monitor_app = typer.Typer(help="Monitor commands")
@@ -163,10 +164,10 @@ def alarm_test(
         table.add_row(alarm.name, triggered_str, details)
 
         if result.triggered and send_alert:
-            from market_tracker.alerts.sns import send_sms
+            from market_tracker.alerts.dispatcher import send_alert as dispatch
             msg = f"[TEST] {alarm.name} TRIGGERED: {'; '.join(result.messages[:2])}"
-            ok = send_sms(msg)
-            console.print(f"  SNS send: {'OK' if ok else 'FAILED'}")
+            ok = dispatch(msg, cfg.notify)
+            console.print(f"  Alert send ({cfg.notify.delivery}): {'OK' if ok else 'FAILED'}")
 
     console.print(table)
 

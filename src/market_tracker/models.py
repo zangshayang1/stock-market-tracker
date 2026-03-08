@@ -40,9 +40,21 @@ class AlarmConfig(BaseModel):
     rules: list[RuleConfig] = Field(min_length=1)
 
 
+class NotifyConfig(BaseModel):
+    """Notification delivery configuration.
+
+    Only the channel is specified here. The target address/number is
+    read from environment variables (SMTP_USER for email, SNS_PHONE_NUMBER
+    for sms) so that credentials stay out of config files.
+    """
+
+    delivery: Literal["sms", "email"] = "sms"
+
+
 class AlarmsFile(BaseModel):
     """Top-level structure of alarms.yaml."""
 
+    notify: NotifyConfig = Field(default_factory=NotifyConfig)
     alarms: list[AlarmConfig]
 
 

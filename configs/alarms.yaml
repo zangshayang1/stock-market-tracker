@@ -1,3 +1,6 @@
+notify:
+  delivery: email                   # "email" or "sms" — target address/number comes from .env
+
 alarms:
   - name: "QQQ Dip 1.5%"
     cooldown_minutes: 60

@@ -26,7 +26,8 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from market_tracker.alarms.evaluator import evaluate_alarm
 from market_tracker.alarms.state import AlarmStateManager
-from market_tracker.alerts.sns import send_health_alert, send_sms
+from market_tracker.alerts.dispatcher import send_alert
+from market_tracker.alerts.sns import send_health_alert
 from market_tracker.config import load_alarms_config
 from market_tracker.data import cache as data_cache
 from market_tracker.models import AlarmFiredEvent
@@ -167,14 +168,14 @@ class MonitorDaemon:
                 fired_count += 1
                 continue
 
-            sent = send_sms(msg)
+            sent = send_alert(msg, cfg.notify)
             if sent:
                 self.state.record_fired(alarm.name, new_sides=result.new_sides)
                 fired_count += 1
                 logger.info("Alarm fired: %s", alarm.name)
             else:
                 logger.warning(
-                    "Alarm '%s' triggered but SNS send failed — not updating state", alarm.name
+                    "Alarm '%s' triggered but alert send failed — not updating state", alarm.name
                 )
 
         elapsed_ms = int((datetime.now() - start_ts).total_seconds() * 1000)
