@@ -135,10 +135,11 @@ def alarm_list(
             console.print(f"  • [{rule.type}] {rule.symbol}  {rule.params}")
 
 
-@alarm_app.command("test")
+@alarm_app.command("evaluate")
 def alarm_test(
     config: str = typer.Option(DEFAULT_CONFIG, "--config", "-c"),
-    send_alert: bool = typer.Option(False, "--send-alert", help="Actually send SNS SMS"),
+    send_alert: bool = typer.Option(False, "--send-alert", help="Send alert for every alarm regardless of trigger result"),
+    alarm_name: str | None = typer.Option(None, "--alarm", "-a", help="Only evaluate (and alert for) this alarm name"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """One-shot dry-run evaluation against live market data."""
@@ -152,20 +153,27 @@ def alarm_test(
         err_console.print(f"Error: {exc}")
         raise typer.Exit(1)
 
+    alarms = cfg.alarms
+    if alarm_name:
+        alarms = [a for a in alarms if a.name == alarm_name]
+        if not alarms:
+            err_console.print(f"Error: no alarm named '{alarm_name}'")
+            raise typer.Exit(1)
+
     table = Table(title="Alarm Test Results")
     table.add_column("Alarm", style="cyan")
     table.add_column("Triggered", style="bold")
     table.add_column("Details")
 
-    for alarm in cfg.alarms:
+    for alarm in alarms:
         result = evaluate_alarm(alarm)
         triggered_str = "[red]YES[/red]" if result.triggered else "[green]NO[/green]"
         details = " | ".join(result.messages[:2])
         table.add_row(alarm.name, triggered_str, details)
 
-        if result.triggered and send_alert:
+        if send_alert:
             from market_tracker.alerts.dispatcher import send_alert as dispatch
-            msg = f"[TEST] {alarm.name} TRIGGERED: {'; '.join(result.messages[:2])}"
+            msg = f"[TEST] {alarm.name} {'TRIGGERED' if result.triggered else 'NOT TRIGGERED'}: {'; '.join(result.messages[:2])}"
             ok = dispatch(msg, cfg.notify)
             console.print(f"  Alert send ({cfg.notify.delivery}): {'OK' if ok else 'FAILED'}")
 

@@ -1,6 +1,6 @@
 # market-tracker
 
-A Python CLI tool that monitors stock prices in near-real-time (Yahoo Finance, ~15-min delay), fires rule-based SMS alarms via AWS SNS, and backtests investment strategies with standard performance metrics.
+A Python CLI tool that monitors stock prices in near-real-time (Yahoo Finance, ~15-min delay), fires rule-based alarms via email (SMTP) or SMS (AWS SNS), and backtests investment strategies with standard performance metrics.
 
 ---
 
@@ -16,22 +16,31 @@ python3.11 -m uv sync
 python3.11 -m uv sync --extra dev
 ```
 
-### 2. Configure AWS credentials
+### 2. Configure credentials
 
-Copy `.env.example` to `.env` and fill in your AWS credentials and target phone number:
+Copy `.env.example` to `.env` and fill in your credentials:
 
 ```bash
 cp .env.example .env
 ```
 
 ```dotenv
+# For SMS alerts (AWS SNS)
 AWS_ACCESS_KEY_ID=your_access_key_here
 AWS_SECRET_ACCESS_KEY=your_secret_key_here
 AWS_DEFAULT_REGION=us-east-1
-SNS_PHONE_NUMBER=+15551234567   # E.164 format
+SNS_PHONE_NUMBER=+15551234567       # E.164 format
+
+# For email alerts (Gmail SMTP)
+SMTP_USER=your_gmail@gmail.com
+SMTP_PASSWORD=your_app_password     # Gmail App Password, not your account password
+# SMTP_HOST=smtp.gmail.com          # default
+# SMTP_PORT=587                     # default
 ```
 
-The `.env` file is loaded automatically at startup. Alternatively, export the variables in your shell.
+The `.env` file is loaded automatically at startup. The delivery channel (`email` or `sms`) is set in `alarms.yaml` — the target address/number is always sourced from `.env`.
+
+Gmail App Passwords: https://myaccount.google.com/apppasswords
 
 ### 3. Run tests
 
@@ -81,6 +90,9 @@ Create a YAML file (or edit `configs/alarms.example.yaml`). Each alarm has a nam
 **Alarm skeleton:**
 
 ```yaml
+notify:
+  delivery: email    # "email" or "sms" — target address/number comes from .env
+
 alarms:
   - name: "My Alarm"        # unique name — used as state key
     cooldown_minutes: 60    # minimum minutes between firings
@@ -188,17 +200,20 @@ The `min_time_of_day` gate prevents false spikes from low early-morning volume b
 
 ---
 
-#### Test, list, and silence alarms
+#### Evaluate, list, and silence alarms
 
 ```bash
 # Pretty-print all loaded alarms and their rules
 market-tracker alarm list --config configs/alarms.yaml
 
-# One-shot evaluation against live market data (no SMS sent)
-market-tracker alarm test --config configs/alarms.yaml
+# One-shot evaluation against live market data (no alert sent)
+market-tracker alarm evaluate --config configs/alarms.yaml
 
-# Evaluate AND send SMS for triggered alarms
-market-tracker alarm test --config configs/alarms.yaml --send-alert
+# Evaluate and send an alert for every alarm regardless of trigger result
+market-tracker alarm evaluate --config configs/alarms.yaml --send-alert
+
+# Evaluate and send alert for a specific alarm only
+market-tracker alarm evaluate --config configs/alarms.yaml --alarm "QQQ Dip 1.5%" --send-alert
 
 # Silence an alarm for 8 hours (useful after market events you already know about)
 market-tracker alarm silence "QQQ Large Daily Drop" --hours 8
@@ -302,8 +317,11 @@ Config (config.py)         Exchange-calendars   Cache (cache.py)
                                                                   │
                                                        ┌──────────┴──────────┐
                                                        ▼                     ▼
-                                               State (state.py)       SNS (sns.py)
-                                               dedup / cooldown        SMS alert
+                                               State (state.py)   Dispatcher (dispatcher.py)
+                                               dedup / cooldown    ┌─────────┴─────────┐
+                                                                   ▼                   ▼
+                                                            Email (email_alert.py)  SNS (sns.py)
+                                                            SMTP/Gmail              SMS alert
 ```
 
 ---
@@ -318,6 +336,7 @@ Config (config.py)         Exchange-calendars   Cache (cache.py)
 |---|---|
 | `RuleConfig` | One rule's type, symbol, and params |
 | `AlarmConfig` | Named alarm with cooldown, logic, and rule list |
+| `NotifyConfig` | Delivery channel (`email` or `sms`); target sourced from env |
 | `AlarmState` | Per-alarm dedup state (last_fired, silenced_until, last_side) |
 | `BacktestConfig` | Full backtest spec including strategy params |
 | `BacktestResult` | All output metrics plus the full trade log |
@@ -398,13 +417,15 @@ Deduplication happens in three layers, in this precedence order:
 
 ---
 
-### Layer 7 — SNS Alerts (`alerts/sns.py`)
+### Layer 7 — Alerts (`alerts/`)
 
-`send_sms(message, phone_number)` publishes via `boto3` to a direct phone number (not a topic). SMS messages are capped at 155 characters before encoding and truncated with `…` if longer to stay within carrier limits.
+**`dispatcher.py`** routes each alert to the correct backend based on `notify.delivery` in the alarms config. The recipient address/number is always read from env vars (`SMTP_USER` for email, `SNS_PHONE_NUMBER` for SMS) — never from the config file.
 
-On failure, it retries with exponential backoff (2s, 4s, 8s) for up to 4 total attempts before returning `False`. The caller (daemon) uses the return value to decide whether to update dedup state.
+**`email_alert.py`** sends via SMTP using STARTTLS (default: Gmail on port 587). The first line of the message is used as the email subject (truncated at 80 chars).
 
-`send_health_alert` is a separate function called by the daemon when 10 consecutive polling cycles all fail — it sends a diagnostic SMS so you know the tool itself is degraded.
+**`sns.py`** publishes via `boto3` to a direct phone number (not a topic). SMS messages are capped at 155 characters and truncated with `…` to stay within carrier limits. On failure, it retries with exponential backoff (2s, 4s, 8s) for up to 4 total attempts before returning `False`.
+
+`send_health_alert` is called by the daemon when 10 consecutive polling cycles all fail — it sends a diagnostic SMS so you know the tool itself is degraded.
 
 ---
 
@@ -487,6 +508,8 @@ investment-tools/
         │   ├── evaluator.py      # AND/OR logic
         │   └── state.py          # cooldown, silence, side-tracking; atomic writes
         ├── alerts/
+        │   ├── dispatcher.py     # routes to email or SMS based on notify.delivery
+        │   ├── email_alert.py    # SMTP/Gmail sender
         │   └── sns.py            # boto3 SNS, retry, truncation
         ├── monitor/
         │   └── daemon.py         # APScheduler, market hours, PID file
@@ -504,7 +527,7 @@ investment-tools/
 market-tracker monitor start    [--config FILE] [--interval SECS] [--verbose]
 market-tracker monitor status   [--config FILE]
 market-tracker alarm list       [--config FILE]
-market-tracker alarm test       [--config FILE] [--send-alert] [--verbose]
+market-tracker alarm evaluate   [--config FILE] [--alarm NAME] [--send-alert] [--verbose]
 market-tracker alarm silence    NAME [--hours N]
 market-tracker backtest run     [--config FILE] [--output FILE] [--verbose]
 market-tracker backtest report  FILE
