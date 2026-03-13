@@ -67,18 +67,29 @@ def fetch_history(
 
 def fetch_quote(symbol: str) -> dict:
     """
-    Return latest fast_info dict for *symbol* (price, prev_close, open, volume).
+    Return latest quote dict for *symbol* using ticker.info for accurate raw data.
+
+    Fields returned:
+      last_price      — regularMarketPrice (raw intraday last)
+      previous_close  — regularMarketPreviousClose (unadjusted)
+      open            — regularMarketOpen (unadjusted)
+      day_high        — regularMarketDayHigh
+      day_low         — regularMarketDayLow
+      day_volume      — regularMarketVolume
+
     Returns empty dict on failure.
     """
     try:
         ticker = yf.Ticker(symbol)
-        info = ticker.fast_info
+        info = ticker.info
         return {
             "symbol": symbol,
-            "last_price": info.last_price,
-            "previous_close": info.previous_close,
-            "open": info.open,
-            "day_volume": info.last_volume,
+            "last_price": info.get("regularMarketPrice"),
+            "previous_close": info.get("regularMarketPreviousClose"),
+            "open": info.get("regularMarketOpen"),
+            "day_high": info.get("regularMarketDayHigh"),
+            "day_low": info.get("regularMarketDayLow"),
+            "day_volume": info.get("regularMarketVolume"),
         }
     except Exception as exc:
         logger.error("Failed to fetch quote for %s: %s", symbol, exc)
